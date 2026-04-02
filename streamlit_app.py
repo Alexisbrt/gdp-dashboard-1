@@ -1,151 +1,99 @@
 import streamlit as st
+import yfinance as yf
 import pandas as pd
-import math
-from pathlib import Path
+import numpy as np
+import plotly.express as px
 
-# Set the title and favicon that appear in the Browser's tab bar.
-st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
+st.set_page_config(page_title="Portfolio Dashboard", layout="wide")
+
+st.title("📊 Portfolio Dashboard")
+
+# -----------------------------
+# INPUT UTILISATEUR
+# -----------------------------
+st.sidebar.header("Configuration")
+
+tickers = st.sidebar.text_input(
+    "Tickers (séparés par une virgule)",
+    "AAPL,MSFT,TSLA"
 )
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
+start_date = st.sidebar.date_input("Date de début", pd.to_datetime("2023-01-01"))
 
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
+# convertir en liste
+tickers_list = [t.strip() for t in tickers.split(",")]
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
+# -----------------------------
+# DATA
+# -----------------------------
+data = yf.download(tickers_list, start=start_date)["Close"]
 
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
+returns = data.pct_change().dropna()
 
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
+# -----------------------------
+# KPIs
+# -----------------------------
+st.subheader("📈 Indicateurs")
 
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
-    )
+mean_returns = returns.mean() * 252
+volatility = returns.std() * np.sqrt(252)
 
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
+sharpe_ratio = mean_returns / volatility
 
-    return gdp_df
+col1, col2, col3 = st.columns(3)
 
-gdp_df = get_gdp_data()
+col1.metric("Rendement annuel moyen", f"{mean_returns.mean():.2%}")
+col2.metric("Volatilité moyenne", f"{volatility.mean():.2%}")
+col3.metric("Sharpe ratio", f"{sharpe_ratio.mean():.2f}")
 
-# -----------------------------------------------------------------------------
-# Draw the actual page
+# -----------------------------
+# PERFORMANCE
+# -----------------------------
+st.subheader("📉 Performance du portefeuille")
 
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
+normalized = data / data.iloc[0]
 
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
+fig_perf = px.line(normalized, title="Performance normalisée")
 
-# Add some spacing
-''
-''
+st.plotly_chart(fig_perf, use_container_width=True)
 
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
+# -----------------------------
+# ALLOCATION (égale)
+# -----------------------------
+st.subheader("🥧 Allocation")
 
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
+weights = np.array([1/len(tickers_list)] * len(tickers_list))
 
-countries = gdp_df['Country Code'].unique()
+alloc_df = pd.DataFrame({
+    "Ticker": tickers_list,
+    "Poids": weights
+})
 
-if not len(countries):
-    st.warning("Select at least one country")
+fig_pie = px.pie(alloc_df, values="Poids", names="Ticker")
 
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
+st.plotly_chart(fig_pie, use_container_width=True)
 
-''
-''
-''
+# -----------------------------
+# MATRICE DE CORRÉLATION
+# -----------------------------
+st.subheader("🔗 Corrélation")
 
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
+corr = returns.corr()
 
-st.header('GDP over time', divider='gray')
+fig_corr = px.imshow(corr, text_auto=True, title="Matrice de corrélation")
 
-''
+st.plotly_chart(fig_corr, use_container_width=True)
 
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
+# -----------------------------
+# DRAWDOWN
+# -----------------------------
+st.subheader("📉 Drawdown")
 
-''
-''
+cum_returns = (1 + returns).cumprod()
+peak = cum_returns.cummax()
+drawdown = (cum_returns - peak) / peak
 
+fig_dd = px.line(drawdown, title="Drawdown")
 
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
-
-st.header(f'GDP in {to_year}', divider='gray')
-
-''
-
-cols = st.columns(4)
-
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
-
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
-
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+st.plotly_chart(fig_dd, use_container_width=True)
+        

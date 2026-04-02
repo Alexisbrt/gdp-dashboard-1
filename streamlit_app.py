@@ -96,4 +96,5 @@ drawdown = (cum_returns - peak) / peak
 fig_dd = px.line(drawdown, title="Drawdown")
 
 st.plotly_chart(fig_dd, use_container_width=True)
-        
+streamlit run app.py
+                

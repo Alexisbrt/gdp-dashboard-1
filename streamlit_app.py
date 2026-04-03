@@ -6,7 +6,7 @@ import plotly.express as px
 
 st.set_page_config(page_title="Portfolio Dashboard", layout="wide")
 
-st.title("📊 Portfolio Dashboard")
+st.title(" Portfolio Dashboard")
 
 # -----------------------------
 # INPUT UTILISATEUR
@@ -33,7 +33,7 @@ returns = data.pct_change().dropna()
 # -----------------------------
 # KPIs
 # -----------------------------
-st.subheader("📈 Indicateurs")
+st.subheader(" Indicateurs")
 
 mean_returns = returns.mean() * 252
 volatility = returns.std() * np.sqrt(252)
@@ -49,7 +49,7 @@ col3.metric("Sharpe ratio", f"{sharpe_ratio.mean():.2f}")
 # -----------------------------
 # PERFORMANCE
 # -----------------------------
-st.subheader("📉 Performance du portefeuille")
+st.subheader(" Performance du portefeuille")
 
 normalized = data / data.iloc[0]
 
@@ -60,7 +60,7 @@ st.plotly_chart(fig_perf, use_container_width=True)
 # -----------------------------
 # ALLOCATION (égale)
 # -----------------------------
-st.subheader("🥧 Allocation")
+st.subheader(" Allocation")
 
 weights = np.array([1/len(tickers_list)] * len(tickers_list))
 
